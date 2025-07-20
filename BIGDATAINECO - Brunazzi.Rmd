@@ -1,0 +1,2994 @@
+---
+title: "BD IN ECONOMICS PROJECT"
+author: "Alice Brunazzi"
+date: "2025-05-21"
+output:
+  html_document:
+    df_print: paged
+---
+
+#PREPROCESSING
+## AN13
+
+```{r}
+library(readr)
+
+anno13 <- read_csv("C:/Users/Utente/OneDrive/Desktop/progetti/Big Data in economics/an13.csv", 
+     col_types = cols(data_inizio = col_datetime(format = "%d/%m/%Y %H:%M"), 
+         professione = col_skip()))
+```
+
+
+```{r}
+
+library(skimr)
+skim_without_charts(anno13)
+```
+
+###ANNO NASCITA
+
+Si plotta istogramma 
+
+```{r}
+hist(anno13$data_nascita)
+```
+```{r}
+plot(anno13$data_nascita, col="grey")
+abline(h = 1925, col = "orange4", lty = 2)
+abline(h = 2007, col = "orange2", lty = 2)
+```
+Dai 6 anni in giu non é possibile acquistare una tessera, si rimuovono iscritti se nati dopo 2007. Si eliminano 59 records
+
+
+```{r}
+
+anno13 <- anno13[anno13$data_nascita <= 2007, ]
+anno13 <- anno13[anno13$data_nascita >= 1925, ]
+```
+
+
+```{r}
+plot(anno13$data_nascita, col="grey")
+abline(h = 1925, col = "orange4", lty = 2)
+abline(h = 2007, col = "orange2", lty = 2)
+```
+
+```{r}
+summary(anno13$data_nascita)
+hist(anno13$data_nascita, col = "orange3")
+prop.table(table(anno13$data_nascita))
+```
+
+```{r}
+
+anni <- anno13$data_nascita
+breaks <- seq(
+  floor(min(anni, na.rm=TRUE)  / 10) * 10,
+  ceiling(max(anni, na.rm=TRUE) / 10) * 10,
+  by = 10
+)
+
+# ETICHETTE
+labels <- paste(breaks[-length(breaks)],
+                breaks[-1] - 1,
+                sep = "-")
+
+# DECENNI
+anno13$decennio <- cut(
+  anno13$data_nascita,
+  breaks = breaks,
+  labels = labels,
+  right  = FALSE,      
+  include.lowest = TRUE
+)
+
+# Tabella delle frequenze per decennio
+tab_dec <- table(anno13$decennio, useNA="ifany")
+
+
+prop_dec <- prop.table(tab_dec)
+
+
+print(tab_dec)
+print(round(prop_dec, 3))
+
+```
+
+
+Si considera pulita la variabile anno di nascita, etá non cambierebbe niente da un punto di vista infromativo, e non sapendo il momento esatto dell'analisi non sarebbe 100% accurata 
+
+### GENDER
+
+```{r}
+library(dplyr)
+
+anno13 <- anno13 %>%
+  mutate(sesso = case_when(
+    sesso == "F" ~ 1,
+    sesso == "M" ~ 0,
+    TRUE ~ NA_real_
+  )) %>%
+  filter(!is.na(sesso))
+
+summary(anno13$sesso)
+```
+Gender viene binarizzata, 0 uomo e 1 donna. Non troppo sbilanciata, anzi. Leggera prevalenza di donne. vengono eliminati i nulli poiche non imputabili
+
+```{r}
+summary(anno13$sesso)
+unique(anno13$sesso)
+sum(anno13$sesso == 1)
+table(anno13$sesso)
+```
+
+### DATA INIZIO
+
+Quando é stato fatto l'abbonamento. Lánalisi viene fatta sui profili aperti tra il 25 10 2012 e il 27 gennaio 2013, per un totale di 338 date diverse
+
+```{r}
+summary(anno13$data_inizio)
+range(anno13$data_inizio)
+length(unique(anno13$data_inizio))
+
+```
+
+```{r}
+hist(anno13$data_inizio,
+     breaks = "weeks",  
+     main = "Distribuzione delle date di inizio",
+     xlab = "Data",
+     col = "orange4",
+     border = "white")
+
+```
+
+Si creano variabili giorno, mese ed anno di inizio, piu analizzabili e meno dispersive.
+
+```{r}
+library(dplyr)
+
+anno13$anno_inizio <- format(anno13$data_inizio, "%Y")
+anno13$mese_inizio <- format(anno13$data_inizio, "%m")  # formato "2023-05"
+
+# Conteggio per data
+conteggio_per_data <- anno13 %>%
+  group_by(data_inizio) %>%
+  summarise(n = n())
+
+# Plot
+plot(conteggio_per_data$data_inizio, conteggio_per_data$n,
+     type = "l",
+     main = "Osservazioni per data",
+     xlab = "Data",
+     ylab = "Numero di record",
+     col = "orange3")
+
+```
+
+```{r}
+table(anno13$anno_inizio)   # Distribuzione per anno
+table(anno13$mese_inizio)   # Distribuzione per mese
+
+```
+
+GIORNI DELLA SETTIMANA
+
+```{r}
+# Imposta locale in italiano PRIMA di usare weekdays()
+Sys.setlocale("LC_TIME", "C")
+
+# Rigenera i giorni della settimana in italiano
+anno13$giorno_settimana <- weekdays(anno13$data_inizio)
+
+```
+```{r}
+table(anno13$giorno_settimana)
+
+```
+```{r}
+barplot(table(anno13$giorno_settimana),
+        main = "Distribuzione per giorno della settimana",
+        col = "orange4",
+        xlab = "Giorno",
+        ylab = "Numero di osservazioni",
+        las = 2)
+
+pie(table(anno13$giorno_settimana),
+    main = "Distribuzione per giorno della settimana",
+    col = rainbow(7))
+
+```
+
+### IMPORTO
+
+Importo pagato per l'abbonamento
+
+```{r}
+summary(anno13$importo)
+```
+
+```{r}
+plot(anno13$importo, col = "orange2")
+```
+
+### TIPO PAGAMENTO
+
+```{r}
+skim_without_charts(anno13$tipo_pag)
+```
+```{r}
+table(anno13$tipo_pag)
+```
+```{r}
+table(anno13$tipo_pag, anno13$sconto)
+```
+```{r}
+table(anno13$tipo_pag, anno13$agenzia_tipo)
+```
+
+
+### SCONTO E RIDUZIONE
+
+```{r}
+table(anno13$sconto)
+```
+
+```{r}
+table(anno13$sconto, anno13$riduzione)
+
+```
+
+```{r}
+library(dplyr)
+
+anno13 %>%
+  group_by(sconto) %>%
+  summarise(valori_riduzione = toString(unique(riduzione)))
+
+```
+
+```{r}
+all(anno13$data_nascita[anno13$riduzione == "PASS 60"] < 1949)
+all(anno13$data_nascita[anno13$riduzione == "ABBONAMENTO MUSEI su carte EDISU"] > 1986)
+```
+
+Controllate eventulai inconsistencies tra gli abbonamenti stuenti e over 65 per le etá
+
+
+Si codifica lo sconto come presente / assente, poiche si rischierebbe di perdere informazioni con la codifica/riduzione delle variabili, ed il one hot encoding renderebbe troppo sparso il dataframe
+
+```{r}
+library(dplyr)
+
+anno13 <- anno13 %>%
+  mutate(
+    sconto_bin = ifelse(sconto == "NESSUNO SCONTO", 0, 1)
+  )
+
+```
+
+
+### Abbonamento
+
+```{r}
+unique(anno13$riduzione)
+round(prop.table(table(anno13$riduzione)),3)
+```
+
+Si riduce il numer odi categorie mantenendo solo le piu rappresentative, cioe in percentuale:  42%, 32% 12%, le restanti accorpate come ASSENZA DELLE PRECEDENTI
+
+```{r}
+# Carica il pacchetto
+library(dplyr)
+
+# 2) Crea le 4 variabili one-hot
+anno13 <- anno13 %>%
+  mutate(
+    abb_museotorino = ifelse(riduzione == "ABBONAMENTI MUSEI TORINO",      1, 0),
+    abb_ridotto     = ifelse(riduzione == "ABBONAMENTO MUSEI RIDOTTO",     1, 0),
+    abb_qnt30         = ifelse(riduzione == "OFFERTA SU QUANTITATIVO 30",     1, 0),
+    other           = ifelse(riduzione %in% c("ABBONAMENTI MUSEI TORINO",
+                                              "ABBONAMENTO MUSEI RIDOTTO",
+                                              "OFFERTA SU QUANTITATIVO 30"), 0, 1)
+  )
+
+# 3) Verifica
+summary(anno13)
+
+```
+
+
+
+
+### AGENZIA tipo 
+
+Agenzia sparso e non infromativo
+
+```{r}
+unique(anno13$agenzia_tipo)
+
+```
+
+
+```{r}
+(table(anno13$agenzia_tipo))
+```
+
+```{r}
+# Carica il pacchetto
+library(dplyr)
+
+
+# 2) Crea le 5 variabili one-hot per i gruppi di canale
+anno13 <- anno13 %>%
+  mutate(
+    canale_diretto   = ifelse(agenzia_tipo %in% c("MUSEO", "ACQUISTO ONLINE"), 1, 0),
+    info_point     = ifelse(agenzia_tipo == "PUNTO INFORMATIVO",           1, 0),
+    retail_fisico   = ifelse(agenzia_tipo %in% c("EDICOLE",
+                                                  "PUNTO COMMERCIALE",
+                                                  "TEATRI"),                  1, 0),
+    canale_partner  = ifelse(agenzia_tipo %in% c("ASSOCIAZIONE",
+                                                  "CRAL",
+                                                  "GRUPPO D'ACQUISTO",
+                                                  "OFFERTA AZIENDA",
+                                                  "OFFERTA SCUOLE",
+                                                  "TESSERE ORO"),             1, 0),
+    other_channel  = ifelse(agenzia_tipo == "DATO MANCANTE",                 1, 0)
+  )
+
+```
+
+
+### CAP & comuni
+
+```{r}
+skim_without_charts(anno13$comune)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+anno13 <- anno13 %>%
+  filter(comune != "DATO MANCANTE")
+
+
+anno13 %>%
+  count(comune, sort = TRUE) %>%
+  top_n(10, n) %>%
+  ggplot(aes(x = reorder(comune, n), y = n)) +
+  geom_bar(stat = "identity", fill = "orange4") +
+  coord_flip() +
+  labs(title = "Top 10 comuni per frequenza",
+       x = "Comune",
+       y = "Numero di record") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Conta quanti record per ogni combinazione agenzia_tipo + comune
+df_comuni <- anno13 %>%
+  count(agenzia_tipo, comune)
+
+df_top_comuni <- anno13 %>%
+  count(agenzia_tipo, comune, sort = TRUE) %>%
+  group_by(agenzia_tipo) %>%
+  slice_max(order_by = n, n = 5)
+
+ggplot(df_top_comuni, aes(x = reorder(comune, n), y = n)) +
+  geom_bar(stat = "identity", fill = "darkorange") +
+  coord_flip() +
+  facet_wrap(~ agenzia_tipo, scales = "free_y") +
+  labs(title = "Top 5 comuni per agenzia tipo",
+       x = "Comune",
+       y = "Frequenza") +
+  theme_minimal()
+
+
+
+```
+
+
+### NUOVO ABBONAMENTO
+
+```{r}
+skim_without_charts(anno13$nuovo_abb)
+```
+
+```{r}
+table(anno13$nuovo_abb)
+```
+
+```{r}
+table(anno13$data_inizio[anno13$nuovo_abb == "VECCHIO ABBONATO"])
+
+```
+
+```{r}
+library(dplyr)
+
+anno13 %>%
+  filter(nuovo_abb == "VECCHIO ABBONATO") %>%
+  count(data_inizio, sort = TRUE)
+
+```
+
+```{r}
+anno13 %>%
+  filter(nuovo_abb == "VECCHIO ABBONATO") %>%
+  count(data_inizio) %>%
+  ggplot(aes(x = data_inizio, y = n)) +
+  geom_col(fill = "darkorange") +
+  labs(title = "Date di abbonamento per VECCHIO ABBONATO",
+       x = "Data inizio",
+       y = "Numero di abbonamenti") +
+  theme_minimal()
+
+```
+
+```{r}
+anno13 %>%
+  filter(nuovo_abb == "NUOVO ABBONATO") %>%
+  count(data_inizio) %>%
+  ggplot(aes(x = data_inizio, y = n)) +
+  geom_col(fill = "darkorange") +
+  labs(title = "Date di abbonamento per NUOVO ABBONATO",
+       x = "Data inizio",
+       y = "Numero di abbonamenti") +
+  theme_minimal()
+
+```
+
+Classe troppo undersampled, non informativa in nessun modo, si procedee con l'eliminazione
+
+
+### pulizia variabili
+```{r}
+colnames(anno13)
+
+cols_to_remove <- c(  "sconto",           "riduzione", "agenzia", "agenzia_tipo", "comune", "cap", "nuovo_abb","decennio", "giorno_settimana" )
+
+
+anno13 <- anno13 %>%
+  select(-all_of(cols_to_remove))
+anno13$...1 <- NULL
+anno13$tipo_pag <- NULL
+anno13$data_inizio <- NULL
+
+colnames(anno13)
+```
+
+
+## DATA1
+
+```{r}
+library(readr)
+data1 <- read_csv("C:/Users/Utente/OneDrive/Desktop/progetti/Big Data in economics/data1.csv")
+```
+
+```{r}
+skim_without_charts(data1)
+```
+
+### ULTIMO INGRESSO
+
+```{r}
+hist(data1$ultimo_ing.x,
+     breaks = "weeks",  
+     main = "Distribuzione delle date di ingresso",
+     xlab = "Data",
+     col = "orange4",
+     border = "white")
+
+```
+
+```{r}
+library(dplyr)
+
+# Estrai anno e mese (facoltativo, utile se vuoi aggregare anche per mese o anno)
+data1$anno_ing <- format(data1$ultimo_ing.x, "%Y")
+data1$mese_ing <- format(data1$ultimo_ing.x, "%Y-%m")
+
+# Conteggio per data
+conteggio_per_data <- data1 %>%
+  group_by(ultimo_ing.x) %>%
+  summarise(n = n())
+
+# Plot
+plot(conteggio_per_data$ultimo_ing.x, conteggio_per_data$n,
+     type = "l",
+     main = "Osservazioni per data (ultimo_ing.x)",
+     xlab = "Data",
+     ylab = "Numero di record",
+     col = "orange3")
+
+```
+
+```{r}
+table(data1$anno_ing)   # Distribuzione per anno
+table(data1$mese_ing)   # Distribuzione per mese
+
+```
+
+GIORNI DELLA SETTIMANA
+
+```{r}
+# Imposta locale italiano per i giorni della settimana
+Sys.setlocale("LC_TIME", "C")
+
+# Estrai il giorno della settimana
+data1$giorno_settimana <- weekdays(data1$ultimo_ing.x)
+
+```
+```{r}
+table(data1$giorno_settimana)
+
+
+```
+
+
+```{r}
+barplot(table(data1$giorno_settimana),
+        main = "Distribuzione per giorno della settimana (ultimo_ing.x)",
+        col = "orange4",
+        ylab = "Numero di osservazioni",
+        las = 2)
+
+```
+
+```{r}
+pie(table(data1$giorno_settimana),
+    main = "Distribuzione per giorno della settimana (ultimo_ing.x)",
+    col = rainbow(7))
+
+```
+
+```{r}
+barplot(table(data1$mese_ing),
+        main = "Distribuzione delle osservazioni per mese",
+        col = "orange4",
+        xlab = "Mese",
+        ylab = "Numero di osservazioni",
+        las = 2,
+        cex.names = 0.7)
+
+```
+
+#### grafico a linee sovrapposte
+
+```{r}
+df_abb13 <- data1 %>%
+  count(data = abb13) %>%
+  mutate(var = "abb13")
+
+df_abb14 <- data1 %>%
+  count(data = abb14) %>%
+  mutate(var = "abb14")
+
+df_ing <- data1 %>%
+  count(data = ultimo_ing.x) %>%
+  mutate(var = "ultimo_ing")
+
+# Unisci tutto
+df_all <- bind_rows(df_abb13, df_abb14, df_ing)
+```
+
+```{r}
+ggplot(df_all, aes(x = data, y = n, color = var)) +
+  geom_line(size = 0.5) +
+  labs(title = "Distribuzioni temporali di abb13, abb14 e ultimo_ing.x",
+       x = "Data",
+       y = "Frequenza",
+       color = "Variabile") +
+  theme_minimal()
+
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+
+# Ristruttura i dati in formato long
+data_long <- data1 %>%
+  select(abb13, abb14, ultimo_ing.x) %>%
+  pivot_longer(cols = everything(), names_to = "variabile", values_to = "data")
+
+# Grafico di densità
+ggplot(data_long, aes(x = data, fill = variabile)) +
+  geom_density(alpha = 0.4) +
+  labs(title = "Distribuzioni temporali comparate",
+       x = "Data",
+       y = "Densità") +
+  theme_minimal()
+
+```
+
+
+
+### CHURN
+
+```{r}
+table(data1$si2014)
+prop.table(table(data1$si2014))
+
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(data1, aes(x = ultimo_ing.x, fill = factor(si2014))) +
+  geom_histogram(position = "dodge", bins = 30) +
+  labs(title = "Distribuzione ingressi per churn",
+       fill = "New abb",
+       x = "Data ultimo ingresso",
+       y = "Numero di ingressi") +
+  theme_minimal()
+
+```
+
+```{r}
+boxplot(ultimo_ing.x ~ si2014, data = data1,
+        main = "Ultimo ingresso vs churn",
+        ylab = "Data ultimo ingresso",
+        xlab = "Churn (Si2014)")
+
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Assicurati che le date siano in formato Date
+data1 <- data1 %>%
+  mutate(abb13 = as.Date(abb13),
+         abb14 = as.Date(abb14),
+         ultimo_ing.x = as.Date(ultimo_ing.x),
+         si2014 = as.factor(si2014))
+
+# Trasforma in formato long
+data_long <- data1 %>%
+  select(abb13, ultimo_ing.x, si2014) %>%
+  pivot_longer(cols = c(abb13, ultimo_ing.x),
+               names_to = "tipo_data",
+               values_to = "data") %>%
+  filter(!is.na(data))  # rimuovi NA
+
+# Plot densità separata per churn (Si2014) e tipo_data
+ggplot(data_long, aes(x = data, color = si2014, linetype = tipo_data)) +
+  geom_density(size = 1) +
+  labs(title = "Distribuzioni temporali comparate per churn",
+       x = "Data",
+       y = "Densità",
+       color = "Churn 0 churn 1 non churn",
+       linetype = "Tipo di data") +
+  theme_minimal() +
+  scale_color_manual(values = c("0" = "orange4", "1" = "green4")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+DATO CHE A FINI STATISTICI LE DATE SONO DISPEERSIVE, SI UTILIZZANO SOLO I MESI, CON 0 = MISSING E DA 1 A 12 I MESI
+
+```{r}
+# Assicurati che la colonna sia in formato Date (se non lo è già)
+data1$ultimo_ing.x <- as.Date(data1$ultimo_ing.x)
+
+# Applica la trasformazione
+data1$ultimo_ing.x <- ifelse(
+  is.na(data1$ultimo_ing.x),
+  0,
+  as.numeric(format(data1$ultimo_ing.x, "%m"))
+)
+
+# Applica la trasformazione
+data1$abb13 <- ifelse(
+  is.na(data1$abb13),
+  0,
+  as.numeric(format(data1$abb13, "%m"))
+)
+
+data1$abb14 <- ifelse(
+  is.na(data1$abb14), 0,as.numeric(format(data1$abb14, "%m"))
+)
+
+```
+
+```{r}
+counts <- data1 %>%
+  filter(si2014 == 0) %>%
+  count(ultimo_ing.x) %>%
+  complete(ultimo_ing.x = 0:12, fill = list(n = 0))
+
+# 4. Visualizza con ggplot2
+ggplot(counts, aes(x = ultimo_ing.x, y = n)) +
+  geom_col(fill = "orange") +
+  scale_x_continuous(breaks = 0:12) +
+  labs(
+    title = "Churned Customers by Month of Last Visit",
+    x     = "Month of Last Visit (0 = no visit)",
+    y     = "Number of Churned Customers"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+data1$...1 <- NULL
+data1$anno_ing <- NULL
+data1$giorno_settimana <- NULL
+data1$mese_ing <- NULL
+
+
+data1$mese_ultimo_ing <- data1$ultimo_ing.x
+data1$ultimo_ing.x <- NULL
+data1$mese2013 <- data1$abb13
+data1$abb13 <- NULL
+data1$mese2014 <- data1$abb14
+data1$abb14 <- NULL
+
+colnames(data1)
+
+```
+
+
+
+## IN13
+
+```{r}
+library(readr)
+in13 <- read_csv("C:/Users/Utente/OneDrive/Desktop/progetti/Big Data in economics/in13.csv")
+```
+
+
+```{r}
+in13$datai <-as.Date(in13$datai, format = "%d/%m/%Y"  )
+```
+
+```{r}
+skim_without_charts(in13)
+```
+
+### CODICE CLIENTE
+
+```{r}
+length(unique(in13$CodCliente))
+
+```
+```{r}
+in13 %>%
+  group_by(CodCliente) %>%
+  summarise(n_musei_distinti = n_distinct(museo)) %>%
+  filter(n_musei_distinti > 1) %>%
+  summarise(n_clienti_con_piu_musei = n())
+```
+
+### DATA INGRESSO
+
+
+
+```{r}
+hist(in13$datai,
+     breaks = "weeks",  
+     main = "Distribuzione delle date di ingresso",
+     xlab = "Data",
+     col = "orange4",
+     border = "white")
+
+```
+
+
+```{r}
+library(dplyr)
+
+# Conta le occorrenze per ciascuna data
+frequenze_date <- in13 %>%
+  group_by(datai) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+
+# Mostra le prime date con frequenza massima
+head(frequenze_date)
+
+
+```
+
+```{r}
+library(ggplot2)
+
+frequenze_date %>%
+  slice_max(n, n = 10) %>%
+  ggplot(aes(x = reorder(as.character(datai), -n), y = n)) +
+  geom_col(fill = "darkorange3") +
+  labs(title = "Top 10 giorni con più visite", x = "Data", y = "Numero di visite") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+### ORARIO INGRESSO
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Se necessario, converti in orario (se è stringa)
+in13$orai <- hms::as_hms(in13$orai)
+
+# Estrai l'ora (intera)
+in13$ora_intera <- hour(in13$orai)
+
+# Crea grafico della frequenza per ogni ora
+ggplot(in13, aes(x = ora_intera)) +
+  geom_bar(fill = "orange4") +
+  labs(title = "Distribuzione delle visite per ora",
+       x = "Ora",
+       y = "Numero di visite") +
+  scale_x_continuous(breaks = 0:23) +
+  theme_minimal()
+
+```
+
+
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Converti orai in formato hms se non lo è già
+in13 <- in13 %>%
+  mutate(orai = hms::as_hms(orai))
+
+# Rimuovi le righe con orai == 00:00:00 
+in13 <- in13 %>%
+  filter(!(orai == hms::as_hms("00:00:00")))
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Se necessario, converti in orario (se è stringa)
+in13$orai <- hms::as_hms(in13$orai)
+
+# Estrai l'ora (intera)
+in13$ora_intera <- hour(in13$orai)
+
+# Crea grafico della frequenza per ogni ora
+ggplot(in13, aes(x = ora_intera)) +
+  geom_bar(fill = "orange4") +
+  labs(title = "Distribuzione delle visite per ora",
+       x = "Ora",
+       y = "Numero di visite") +
+  scale_x_continuous(breaks = 0:23) +
+  theme_minimal()
+
+```
+
+
+
+### MUSEO
+
+```{r}
+prop.table(table(in13$museo)) *100
+```
+
+```{r}
+# Crea la tabella delle frequenze
+freq_musei <- table(in13$museo)
+
+# Filtra i musei con più di 10.000 visite
+freq_filtrata <- freq_musei[freq_musei > 4000]
+
+# Crea il barplot ordinato
+barplot(sort(freq_filtrata, decreasing = TRUE),
+        las = 2,
+        col = "orange3",
+        main = "Musei con più di 4k visite",
+        xlab = "Museo",
+        ylab = "Numero di visite")
+
+```
+
+```{r}
+library(dplyr)
+
+top_musei <- in13 %>%
+  count(museo, sort = TRUE) %>%
+  top_n(5, n) %>%
+  pull(museo)
+
+# Filtra il dataset solo per i musei top
+in13_top5 <- in13 %>% filter(museo %in% top_musei)
+
+
+```
+
+### FREQUENZE ORARIE PER MUSEO
+
+```{r}
+library(ggplot2)
+
+ggplot(in13_top5, aes(x = orai)) +
+  geom_bar(fill = "orange3") +
+  facet_wrap(~ museo, scales = "free_y") +
+  labs(title = "Frequenza oraria per i top 5 musei",
+       x = "Ora di ingresso",
+       y = "Numero di ingressi") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+in13_top5$datai <- as.Date(in13_top5$datai)
+in13_top5$orai <- as.character(in13_top5$orai)
+
+library(ggplot2)
+library(dplyr)
+
+# Raggruppa per museo, data, orario
+heat_data <- in13_top5 %>%
+  group_by(museo, datai, orai) %>%
+  summarise(visite = n(), .groups = "drop")
+
+# Plot
+ggplot(heat_data, aes(x = datai, y = orai, fill = visite)) +
+  geom_tile() +
+  facet_wrap(~ museo, scales = "free_x") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(title = "Pattern orario nel tempo per i top 5 musei",
+       x = "Data", y = "Ora", fill = "Visite") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+```
+
+
+
+```{r}
+# Top 5 musei
+top_musei <- in13 %>%
+  count(museo, sort = TRUE) %>%
+  slice_max(n, n = 5) %>%
+  pull(museo)
+
+# Filtro sui top 5
+in13_top5 <- in13 %>% filter(museo %in% top_musei)
+
+ggplot(in13_top5, aes(x = datai)) +
+  geom_histogram(binwidth = 3, fill = "darkorange", color = "orange") +
+  facet_wrap(~ museo, scales = "free_y") +
+  labs(title = "Frequenze giornaliere per i top 5 musei",
+       x = "Data",
+       y = "Numero di visite") +
+  theme_minimal()
+
+
+```
+
+```{r}
+colnames(in13)
+
+in13$...1 <- NULL
+in13$prov_museo <- NULL
+in13$com_museo <- NULL
+
+in13$ora_intera <- NULL
+
+colnames(in13)
+
+summary(in13)
+```
+
+
+
+
+
+# JOIN
+
+```{r}
+# Clienti in comune tra an13 e data1
+clienti_comuni <- intersect(anno13$codcliente, data1$codcliente)
+
+# Numero totale di clienti in comune
+length(clienti_comuni)
+
+```
+
+```{r}
+# Record in an13 con codcliente comune
+n_an13 <- anno13 %>% filter(codcliente %in% clienti_comuni) %>% nrow()
+
+# Record in data1 con codcliente comune
+n_data1 <- data1 %>% filter(codcliente %in% clienti_comuni) %>% nrow()
+
+cat("Record in comune in an13:", n_an13, "\n")
+cat("Record in comune in data1:", n_data1, "\n")
+
+```
+
+
+
+```{r}
+clienti_solo_an13 <- setdiff(anno13$codcliente, data1$codcliente)
+# Records di an13 con codcliente non presente in data1
+records_solo_an13 <- anno13 %>% filter(codcliente %in% clienti_solo_an13)
+
+print(records_solo_an13)
+```
+
+```{r}
+library(dplyr)
+
+datain <- inner_join(data1, anno13, by = "codcliente")
+
+datain$...1.y <- NULL
+datain$...1.x <- NULL
+datain$giorno_settimana.x <- NULL
+datain$agenzia <- NULL
+datain$comune < NULL
+datain$other <- NULL
+
+datain$codcliente <- as.numeric(as.character(datain$codcliente))
+datain$si2014 <- as.numeric(as.character(datain$si2014))
+skim_without_charts(datain)
+```
+
+### totale VISITE 2013
+
+```{r}
+library(dplyr)
+
+frequenze_clienti <- in13 %>%
+  group_by(CodCliente) %>%
+  summarise(freq = n(), .groups = "drop")
+
+datain <- datain %>%
+  left_join(frequenze_clienti, by = c("codcliente" = "CodCliente"))
+
+datain$freq[is.na(datain$freq)] <- 0
+
+
+skim_without_charts(datain$freq)
+```
+
+```{r}
+plot(datain$freq, )
+```
+
+
+```{r}
+library(dplyr)
+
+musei_per_cliente <- in13 %>%
+  group_by(CodCliente) %>%
+  summarise(musei_unici = n_distinct(museo), .groups = "drop")
+datain <- datain %>%
+  left_join(musei_per_cliente, by = c("codcliente" = "CodCliente"))
+datain$musei_unici[is.na(datain$musei_unici)] <- 0
+
+
+skim_without_charts(datain$musei_unici)
+```
+
+```{r}
+importi_per_cliente <- in13 %>%
+  group_by(CodCliente) %>%
+  summarise(importo_totale = sum(importo, na.rm = TRUE), .groups = "drop")
+
+```
+
+```{r}
+datain <- datain %>%
+  left_join(importi_per_cliente, by = c("codcliente" = "CodCliente"))
+
+```
+
+```{r}
+datain$importo_totale[is.na(datain$importo_totale)] <- 0
+datain$anno_inizio <- as.numeric(as.character(datain$anno_inizio))
+datain$mese_inizio <- as.numeric(as.character(datain$mese_inizio))
+skim_without_charts(datain)
+```
+
+```{r}
+# Assicuriamoci che entrambi i dataset abbiano CodCliente come chiave
+library(dplyr)
+
+# Uniamo le tabelle per portare l'importo da an13 dentro datain
+datain <- datain %>%
+  left_join(anno13 %>% select(codcliente, importo) %>% rename(importo_an13 = importo), 
+            by = "codcliente") %>%
+  mutate(bilancio_abb = importo_an13 - importo_totale)
+
+```
+
+
+```{r}
+colnames(datain)
+datain$mese2013 <- NULL
+datain$anno_inizio <- NULL
+datain$importo_an13 <- NULL
+```
+
+
+
+
+
+```{r}
+library(dplyr)
+library(corrplot)
+
+
+# Seleziona le variabili numeriche
+numeric_vars <- datain %>%
+  select(where(is.numeric))
+
+# Calcola la matrice di correlazione
+cor_matrix <- cor(numeric_vars, use = "complete.obs", method = "spearman")
+
+# Visualizza con corrplot (etichette verticali)
+corrplot(cor_matrix,
+         method = "color",
+         type = "lower",
+         tl.col = "black",
+         tl.cex =0.7,
+         number.cex = 0.5,
+         addCoef.col = "black",
+         tl.srt = 90)  # Rotazione verticale
+
+```
+
+```{r}
+
+skim_without_charts(datain)
+```
+
+
+
+# SELF ORGANIZING MAP
+
+Non sapendo a priori il numero di cluster da trovare, si prova a individuarli sulla base di vari metodi:
+
+
+```{r}
+
+# Ricaricare
+datain <- read.csv("datain2.csv", stringsAsFactors = FALSE)
+
+```
+
+
+```{r}
+
+datain$Eigenvector <- NULL
+datain$Closeness <- NULL
+datain$Betweenness <- NULL
+datain$Degree<- NULL
+
+summary(datain)
+```
+
+
+```{r}
+
+library(kohonen)
+library(tidyverse)
+
+```
+
+
+## SELF ORGANIZING MAP 20 x 20 
+
+```{r}
+
+set.seed(133)
+
+numeric_data <- datain[, sapply(datain, is.numeric)]
+data_matrix <- as.matrix(numeric_data)  # solo numerici
+data_scaled <- scale(data_matrix)
+grid <- somgrid(xdim = 20, ydim = 20, topo = "hexagonal")
+som_model <- som(data_scaled, 
+                 grid = grid, 
+                 rlen = 250,                # Numero di epoche
+                 alpha = c(0.05, 0.01),     # Tasso di apprendimento iniziale e finale
+                 keep.data = TRUE,
+                 mode="batch",
+                 maxNA.fraction=.5,
+                 dist.fcts = "euclidean")
+
+
+# Mappa dei cambiamenti (quanto i pesi cambiano in ogni iterazione)
+plot(som_model, type = "changes")
+
+# U-Matrix (distanza tra nodi adiacenti)
+plot(som_model, type = "dist.neighbours", palette.name = terrain.colors)
+
+# Mappa con i dati assegnati ai nodi
+plot(som_model, type = "mapping", labels = rownames(data_scaled), cex = 0.5)
+
+
+
+```
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# 1. Ottieni i cluster assegnati per ogni cliente
+clusters <- som_model$unit.classif
+
+# 2. Costruisci un data frame con dati scalati e cluster
+profile_data <- as.data.frame(data_scaled) %>%
+  mutate(cluster = clusters)
+
+# 3. Calcola i profili medi per cluster
+cluster_profiles <- profile_data %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
+  arrange(cluster)
+
+print(cluster_profiles)
+
+# 4. Visualizzazione: profilo medio delle variabili per cluster
+
+cluster_profiles_long <- cluster_profiles %>%
+  pivot_longer(cols = -cluster, names_to = "variable", values_to = "mean_value")
+
+
+```
+
+```{r}
+node_assignment <- som_model$unit.classif  # vettore di lunghezza = n osservazioni
+
+churn_labels <- datain$si2014
+
+df_churn <- data.frame(
+  nodo = node_assignment,
+  churn = churn_labels
+)
+
+library(dplyr)
+
+churn_distribution <- df_churn %>%
+  group_by(nodo) %>%
+  summarise(
+    churners = sum(churn == 1, na.rm = TRUE),
+    total = n(),
+    churn_rate = churners / total
+  )
+
+# Crea un vettore di churn rate per ogni nodo (da 1 a numero nodi)
+churn_vector <- rep(NA, length(som_model$grid$pts[,1]))
+churn_vector[churn_distribution$nodo] <- churn_distribution$churn_rate
+
+# Mappa SOM con churn rate per nodo
+plot(som_model, type = "property", property = churn_vector, 
+     main = "Tasso di churn per nodo SOM", 
+     palette.name = heat.colors)
+
+```
+
+
+
+```{r}
+wss <- numeric()
+
+for (k in 2:50) {
+  set.seed(133)
+  km <- kmeans(codes, centers = k)
+  wss[k] <- km$tot.withinss
+}
+
+plot(2:50, wss[2:50], type = "b", pch = 19,
+     xlab = "Numero di cluster", ylab = "WSS (Within Sum of Squares)",
+     main = "Metodo del gomito")
+
+```
+
+```{r}
+summary(som_model)
+```
+
+
+
+## SOM 15 x 15 KMEANS 
+
+```{r}
+library(kohonen)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+set.seed(133)
+
+# 1. Estrai i codebook vectors (nodi SOM)
+codes <- som_model$codes[[1]]
+
+# 2. Applica K-means con k = 4 sui nodi della SOM
+set.seed(133)
+k <- 2
+codebook_clusters_kmeans <- kmeans(codes, centers = k)
+
+# 3. Visualizza la mappa SOM colorata con i macro-cluster
+plot(som_model, type = "mapping",
+     bgcol = rainbow(k)[codebook_clusters_kmeans$cluster],
+     main = "Macro-cluster SOM (K-means)")
+add.cluster.boundaries(som_model, codebook_clusters_kmeans$cluster)
+
+# 4. Associa ogni osservazione al macro-cluster (basato sul nodo a cui è assegnata)
+obs_macro_kmeans <- codebook_clusters_kmeans$cluster[som_model$unit.classif]
+
+# 5. Aggiungi il cluster al dataset
+profile_data <- as.data.frame(data_scaled) %>%
+  mutate(cluster = obs_macro_kmeans)
+
+# 6. Calcola i profili medi per macro-cluster
+cluster_profiles <- profile_data %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
+  arrange(cluster)
+
+print(cluster_profiles)
+
+# 7. Visualizza i profili medi delle variabili per ciascun macro-cluster
+cluster_profiles_long <- cluster_profiles %>%
+  pivot_longer(cols = -cluster, names_to = "variable", values_to = "mean_value")
+
+ggplot(cluster_profiles_long, aes(x = variable, y = mean_value, 
+                                  group = factor(cluster), color = factor(cluster))) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Profili medi delle variabili per macro-cluster SOM (K-means)",
+       color = "Cluster")
+
+```
+
+
+```{r}
+# Assumendo che 'data_scaled' sia il tuo dataset normalizzato
+# e 'obs_macro_kmeans' contenga le assegnazioni ai cluster
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Creazione del dataframe con le assegnazioni ai cluster
+data_with_clusters <- as.data.frame(data_scaled) %>%
+  mutate(cluster = factor(obs_macro_kmeans))
+
+# Calcolo delle medie delle variabili per ciascun cluster
+cluster_profiles <- data_with_clusters %>%
+  group_by(cluster) %>%
+  summarise(across(everything(), mean, na.rm = TRUE))
+
+# Trasformazione in formato lungo per la visualizzazione
+cluster_profiles_long <- cluster_profiles %>%
+  pivot_longer(-cluster, names_to = "variable", values_to = "mean_value")
+
+# Visualizzazione dei profili dei cluster
+ggplot(cluster_profiles_long, aes(x = variable, y = mean_value, fill = cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Profili Medi delle Variabili per Cluster",
+       x = "Variabile",
+       y = "Valore Medio") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+library(dplyr)
+
+# Crea un dataframe con i dati scalati e l'etichetta del cluster K-means
+df_cluster_profiles <- as.data.frame(data_scaled) %>%
+  mutate(cluster = factor(obs_macro_kmeans))  # cluster da 1 a 4
+
+# Calcola i profili medi per ciascun cluster
+cluster_summary <- df_cluster_profiles %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
+  arrange(cluster)
+
+# Stampa il profilo medio dei clienti per ogni cluster
+print(cluster_summary)
+
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+# 1. Separa la colonna 'cluster' dal resto
+cluster_col <- df_cluster_profiles$cluster
+
+# 2. Prendi solo le variabili numeriche (escludendo identificatori come 'codcliente')
+numeric_vars <- df_cluster_profiles %>%
+  select(where(is.numeric)) 
+# 3. Calcola la media globale per ogni variabile
+global_means <- numeric_vars %>%
+  summarise(across(everything(), mean, na.rm = TRUE))
+
+# 4. Calcola gli scostamenti rispetto alla media
+zscores_df <- numeric_vars %>%
+  mutate(across(everything(), ~ . - global_means[[cur_column()]])) %>%
+  mutate(cluster = cluster_col)
+
+# 5. Funzione aggiornata per top variabili per cluster
+top_vars_per_cluster <- function(cluster_id, top_n = 15) {
+  row <- zscores_df %>% filter(cluster == cluster_id) %>% select(-cluster)
+  
+  # Converte la riga in un vettore numerico
+  z_scores <- unlist(row)
+  
+  # Ordina in base allo scostamento assoluto
+  top_vars <- sort(abs(z_scores), decreasing = TRUE)[1:top_n]
+  
+  tibble(
+    cluster = cluster_id,
+    variabile = names(top_vars),
+    valore = unname(z_scores[names(top_vars)]),
+    z_score_assoluto = as.numeric(top_vars)
+  )
+}
+
+# 6. Applica la funzione a tutti i cluster
+clusters <- unique(zscores_df$cluster)
+risultati <- map_dfr(clusters, top_vars_per_cluster, top_n = 15)
+
+# 7. Mostra la tabella finale
+print(risultati)
+
+```
+
+## VISUALIZZAZIONI CLUSTER
+
+```{r}
+library(dplyr)
+data_with_clusters <- datain %>%
+  mutate(cluster = factor(obs_macro_kmeans))   # li estrai dal tuo passaggio 4/5
+churn_by_cluster <- data_with_clusters %>%
+  group_by(cluster) %>%
+  summarise(
+    n_customers = n(),
+    churn_rate  = mean(si2014 == 0)            # 0 = churner
+  )
+print(churn_by_cluster)
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+
+
+# Assumiamo che datain abbia la colonna `cluster` (1 o 2) e `si2014` (1 = retained, 0 = churner)
+churn_by_cluster <- data_with_clusters %>%
+  group_by(cluster) %>%
+  summarise(
+    n_clients  = n(),
+    churn_rate = mean(si2014 == 0)  # proporzione di churner
+  )
+
+# Grafico a barre
+ggplot(churn_by_cluster, aes(x = factor(cluster), y = churn_rate, fill = factor(cluster))) +
+  geom_col(width = 0.6) +
+  scale_fill_manual(values = c("orange4","#ff7f0e"), guide = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(1)) +
+  labs(
+    title = "Churn Rate per Cluster",
+    x     = "Cluster",
+    y     = "Churn Rate (%)"
+  ) +
+  theme_minimal(base_size = 14)
+
+```
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+cluster_profiles <- data_with_clusters %>%
+  group_by(cluster) %>%
+  summarise(
+    freq            = mean(freq,            na.rm = TRUE),
+    musei_unici     = mean(musei_unici,     na.rm = TRUE),
+    importo_totale  = mean(importo_totale,  na.rm = TRUE),
+    sconto_bin      = mean(sconto_bin,      na.rm = TRUE),
+    bilancio_abb            = mean(bilancio_abb,            na.rm = TRUE),
+    sconto_bin            = mean(sconto_bin,            na.rm = TRUE),
+     sesso            = mean(sesso,            na.rm = TRUE)
+  ) %>%
+  pivot_longer(-cluster, names_to = "feature", values_to = "mean_value")
+
+ggplot(cluster_profiles, aes(x = feature, y = factor(cluster), fill = mean_value)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(option = "C") +
+  labs(
+    title = "Profilo Medio delle Feature per Cluster",
+    x     = "Feature",
+    y     = "Cluster",
+    fill  = "Media"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid   = element_blank()
+  )
+
+```
+
+
+
+
+```{r}
+
+library(fmsb)
+
+# Prepara i dati: prendi i primi 5 feature più discriminanti dal tuo profiling
+radar_data <- cluster_profiles %>%
+  filter(feature %in% c("freq","musei_unici","importo_totale","anno_nascita","importo_totale","si2014", "sconto_bin", "sesso")) %>%
+   pivot_wider(
+    names_from  = feature,
+    values_from = mean_value
+  ) %>%
+  arrange(cluster) %>%     # ensure row 1 = cluster 1, row 2 = cluster 2
+  column_to_rownames("cluster")  # now rows are "1","2"
+
+# 3) Add max/min rows for each feature (must be numeric)
+max_row <- apply(radar_data, 2, max, na.rm = TRUE)
+min_row <- apply(radar_data, 2, min, na.rm = TRUE)
+radar_data <- rbind(max = max_row, min = min_row, radar_data)
+
+# 4) Draw the radar chart
+radarchart(
+  radar_data,
+  pcol    = c("brown4", "#ff7f0e"),
+  pfcol   = c(alpha("brown4", 0.5), alpha("#ff7f0e", 0.5)),
+  plwd    = 2,
+  cglty   = 1,           # grid line type
+  axislabcol = "gray50",
+  cglwd   = 0.8,         # grid line width
+  seg     = 8,           # how many circles
+  vlcex   = 0.8          # label size
+)
+legend(
+  "topright",
+  legend = c("Cluster 1", "Cluster 2"),
+  col    = c("brown4", "#ff7f0e"),
+  pch    = 16,
+  pt.cex = 1.5,
+  bty    = "n"
+)
+```
+
+
+```{r}
+### Radar Chart for 8 Selected Features by Cluster
+
+# Librerie necessarie
+library(dplyr)
+library(tidyr)
+library(fmsb)
+library(scales)
+
+# 1) Definisci le variabili da includere nel radar
+features <- c(
+  "freq",
+  "musei_unici",
+  "importo_totale",
+  "data_nascita",   # anno di nascita
+  "si2014",         # 1 = non churner, 0 = churner
+  "sconto_bin",
+  "sesso"           # 1 = femmina, 0 = maschio
+)
+
+# 2) Calcola il profilo medio per ogni cluster
+#    Assicura che siano numeric 0/1 dove serve
+cluster_profiles <- data_with_clusters %>%
+  mutate(
+    si2014 = as.numeric(si2014),
+    sesso  = as.numeric(sesso)
+  ) %>%
+  group_by(cluster) %>%
+  summarise(across(all_of(features), ~ mean(.x, na.rm = TRUE))) %>%
+  arrange(cluster)
+
+# 3) Prepara la tabella per fmsb (righe = max, min, cluster1, cluster2)
+radar_df <- cluster_profiles %>%
+  column_to_rownames("cluster")
+
+max_vals <- apply(radar_df, 2, max, na.rm = TRUE)
+min_vals <- apply(radar_df, 2, min, na.rm = TRUE)
+
+radar_data <- rbind(
+  max = max_vals,
+  min = min_vals,
+  radar_df
+)
+
+# 4) Disegna il radar chart
+radarchart(
+  radar_data,
+  pcol      = c("brown4", "#ff7f0e"),
+  pfcol     = c(alpha("brown4", 0.5), alpha("#ff7f0e", 0.5)),
+  plwd      = 2,
+  cglty     = 1,
+  axislabcol= "gray50",
+  cglwd     = 0.8,
+  seg       = 4,
+  vlcex     = 0.8
+)
+legend(
+  x      = "topright",
+  legend = paste("Cluster", rownames(radar_df)),
+  col    = c("brown4", "#ff7f0e"),
+  pch    = 16,
+  pt.cex = 1.5,
+  bty    = "n"
+)
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+data_with_clusters %>%
+  mutate(cluster = factor(cluster)) %>%
+  ggplot(aes(x = cluster, y = data_nascita, fill = cluster)) +
+    geom_boxplot(alpha = 0.6, outlier.colour = "gray40") +
+    scale_fill_manual(values = c("brown4","#ff7f0e"), guide = FALSE) +
+    labs(title = "Year of Birth by Cluster",
+         x = "Cluster", y = "Year of Birth") +
+    theme_minimal(base_size = 14)
+
+```
+
+```{r}
+data_with_clusters %>%
+  mutate(cluster = factor(cluster)) %>%
+  ggplot(aes(x = cluster, y = freq, fill = cluster)) +
+    geom_boxplot(alpha = 0.6) +
+    scale_fill_manual(values = c("brown4","#ff7f0e"), guide = FALSE) +
+    labs(title = "Visit Frequency by Cluster",
+         x = "Cluster", y = "Total Visits (freq)") +
+    theme_minimal(base_size = 14)
+
+```
+
+```{r}
+data_with_clusters %>%
+  mutate(cluster = factor(cluster)) %>%
+  ggplot(aes(x = cluster, y = si2014, fill = cluster)) +
+    geom_boxplot(alpha = 0.6) +
+    scale_fill_manual(values = c("brown4","#ff7f0e"), guide = FALSE) +
+    labs(title = "Renewal  by Cluster",
+         x = "Cluster", y = "Renewal of the Card") +
+    theme_minimal(base_size = 14)
+
+```
+
+
+
+
+```{r}
+summary(datain)
+summary(data_with_clusters)
+```
+
+```{r}
+library(dplyr)
+
+# 1) Join the two tables on customer ID
+#    – datain has your network measures (Degree, Betweenness, Closeness, Eigenvector)
+#    – data_with_clusters has the “cluster” assignment
+enriched <- datain %>%
+  inner_join(
+    data_with_clusters %>% select(codcliente, cluster),
+    by = "codcliente"
+  )
+
+# 2) Filter to Cluster 2 and summarise each centrality
+cluster2_net <- enriched %>%
+  filter(cluster == 2) %>%
+  summarise(
+    n_members        = n(),
+    mean_degree      = mean(Degree,        na.rm = TRUE),
+    median_degree    = median(Degree,      na.rm = TRUE),
+    mean_betweenness = mean(Betweenness,   na.rm = TRUE),
+    median_betweenness = median(Betweenness,na.rm = TRUE),
+    mean_closeness   = mean(Closeness,     na.rm = TRUE),
+    median_closeness = median(Closeness,   na.rm = TRUE),
+    mean_eigen       = mean(Eigenvector,   na.rm = TRUE),
+    median_eigen     = median(Eigenvector, na.rm = TRUE)
+  )
+
+print(cluster2_net)
+
+```
+```{r}
+library(tidyr)
+library(ggplot2)
+
+enriched %>%
+  filter(cluster == 2) %>%
+  select(Degree, Betweenness, Closeness, Eigenvector) %>%
+  pivot_longer(everything(), names_to = "metric", values_to = "value") %>%
+  ggplot(aes(x = metric, y = value)) +
+    geom_boxplot(fill = "#ff7f0e", alpha = 0.6) +
+    labs(
+      title = "Network Centrality Distributions for Cluster 2",
+      x     = "Centrality Metric",
+      y     = "Value"
+    ) +
+    theme_minimal(base_size = 14)
+
+```
+
+Dove si distribuiscono i membri del cluster 2 nel nostro grafo degli ingressi?
+
+```{r}
+library(igraph)
+library(dplyr)
+
+# 1) Build your graph as before
+#    edges_filtered <- …
+#    g <- graph_from_data_frame(edges_filtered, directed = FALSE)
+
+# 2) Extract cluster labels for each node from data_with_clusters
+#    Make sure both use the same ID column name, here “codcliente”
+cluster_labels <- data_with_clusters %>%
+  select(codcliente, cluster) %>%
+  mutate(codcliente = as.character(codcliente),
+         cluster   = as.factor(cluster))
+
+# 3) Assign cluster attribute to graph vertices
+V(g)$name    <- as.character(V(g)$name)  # ensure names are chars
+V(g)$cluster <- cluster_labels$cluster[ match(V(g)$name, cluster_labels$codcliente) ]
+
+# 4) Define colors: orange for Cluster 2, lightgrey for everything else (including NA)
+V(g)$color <- ifelse(V(g)$cluster == "2", "orange", "lightgrey")
+
+# 5) Plot with node size = degree, no labels
+plot(g,
+     vertex.color       = V(g)$color,
+     vertex.size        = (degree(g) + 1) * 0.5,
+     vertex.label       = NA,
+     edge.width         = E(g)$weight / max(E(g)$weight) * 2,
+     edge.color         = "grey80",
+     main               = "Customer Network (Cluster 2 Highlighted)")
+
+```
+
+```{r}
+library(igraph)
+library(dplyr)
+
+# 1) Build your graph as before
+#    edges_filtered <- …
+#    g <- graph_from_data_frame(edges_filtered, directed = FALSE)
+
+# 2) Extract cluster labels for each node from data_with_clusters
+#    Make sure both use the same ID column name, here “codcliente”
+cluster_labels <- data_with_clusters %>%
+  select(codcliente, cluster) %>%
+  mutate(codcliente = as.character(codcliente),
+         cluster   = as.factor(cluster))
+
+# 3) Assign cluster attribute to graph vertices
+V(g)$name    <- as.character(V(g)$name)  # ensure names are chars
+V(g)$cluster <- cluster_labels$cluster[ match(V(g)$name, cluster_labels$codcliente) ]
+
+library(igraph)
+library(dplyr)
+library(scales)   # for rescale()
+
+# … after you’ve built `g` and joined in V(g)$cluster …
+
+# 1) Compute betweenness centrality (normalized)
+V(g)$betweenness <- betweenness(g, normalized = TRUE)
+
+# 2) Rescale for plotting (so sizes are in a reasonable range)
+betw_vals      <- V(g)$betweenness
+V(g)$size      <- rescale(betw_vals, to = c(3, 12))  # from 3px up to 12px
+
+# 3) Keep cluster coloring
+V(g)$color     <- ifelse(V(g)$cluster == "2", "orange", "lightgrey")
+
+# 4) Label only the top-5 betweenness nodes
+top5          <- order(betw_vals, decreasing = TRUE)[1:5]
+V(g)$label    <- NA
+V(g)$label[top5] <- V(g)$name[top5]
+
+# 5) Plot
+plot(g,
+     vertex.color   = V(g)$color,
+     vertex.size    = V(g)$size,
+     vertex.label   = V(g)$label,
+     vertex.label.cex = 0.7,
+     vertex.label.color = "black",
+     edge.width     = E(g)$weight / max(E(g)$weight) * 2,
+     edge.color     = "grey80",
+     main           = "Customer Network (>3 co-visits) – Betweenness Highlighted")
+
+```
+
+# NETWORK MEASURES
+
+```{r}
+
+# Ricaricare
+datain <- read.csv("datain2.csv", stringsAsFactors = FALSE)
+
+summary(datain)
+```
+
+```{r}
+in13 <- in13 %>%
+  mutate(visita_id = paste(datai, orai, museo, sep = "_"))
+
+```
+
+```{r}
+# Conta quante volte ogni cliente ha partecipato a ogni visita
+visiteplur <- in13 %>%
+  group_by(visita_id, CodCliente) %>%
+  summarise(n = n(), .groups = "drop")
+
+```
+
+```{r}
+
+#Mantieni solo visite con almeno 2 clienti
+filteredvisite <- visiteplur %>%
+  group_by(visita_id) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+```
+
+```{r}
+
+library(tidyr)
+
+#Genera tutte le coppie di clienti per ogni visita
+edges <- filteredvisite %>%
+  group_by(visita_id) %>%
+  summarise(
+    pairs = list(as.data.frame(t(combn(CodCliente, 2))))
+  ) %>%
+  unnest(pairs) %>%
+  rename(from = V1, to = V2)
+
+```
+
+```{r}
+
+#Conta quante volte ogni coppia di clienti ha condiviso visite (il peso)
+edges_counts <- edges %>%
+  group_by(from, to) %>%
+  summarise(weight = n(), .groups = "drop")
+
+```
+
+```{r}
+
+#Filtra solo le coppie che hanno condiviso almeno 3 visite (criterio "più di due")
+edges_filtered <- edges_counts %>%
+  filter(weight >= )
+
+```
+
+
+
+```{r}
+library(igraph)
+
+#Crea grafo non orientato con pesi
+g <- graph_from_data_frame(edges_filtered, directed = FALSE)
+print(summary(g))
+
+```
+
+```{r}
+#Calcola misure di centralità
+degree_centrality <- degree(g)
+betweenness_centrality <- betweenness(g)
+closeness_centrality <- closeness(g, normalized = TRUE)
+eigen_centrality <- eigen_centrality(g)$vector
+
+```
+
+```{r}
+
+# dataframe risultati
+centralities <- data.frame(
+  CodCliente = names(degree_centrality),
+  Degree = degree_centrality,
+  Betweenness = betweenness_centrality,
+  Closeness = closeness_centrality,
+  Eigenvector = eigen_centrality
+)
+print(head(centralities))
+
+```
+
+```{r}
+#Visualizza rete con dimensione nodo proporzionale al degree
+plot(g,
+     vertex.size = degree_centrality / 2 + 1,
+     vertex.label = NA,
+     vertex.color = "orange4",
+     edge.width = E(g)$weight / max(E(g)$weight) * 5,
+     edge.color = "gray70",
+     main = "Rete clienti con almeno 3 visite condivise")
+
+```
+
+```{r}
+
+# Estrai la componente connessa più grande
+comp <- components(g)
+giant <- induced_subgraph(g, which(comp$membership == which.max(comp$csize)))
+
+# Ridisegna solo la componente gigante
+plot(giant,
+     vertex.size = degree(giant) / 2 + 1,
+     vertex.label = NA,
+     vertex.color = "orange3",
+     edge.width = E(giant)$weight / max(E(giant)$weight) * 5,
+     edge.color = "gray70",
+     main = "Componente connessa più grande (≥ 3 visite condivise)")
+
+```
+
+```{r}
+
+cat("Numero nodi:", vcount(g), "\n")
+cat("Numero archi:", ecount(g), "\n")
+cat("Numero componenti connesse:", components(g)$no, "\n")
+cat("Densità della rete:", edge_density(g), "\n")
+cat("Diametro componente gigante:", diameter(giant), "\n")
+
+```
+
+
+```{r}
+
+library(dplyr)
+
+# Ordina per Degree decrescente (clienti più connessi)
+centralities %>%
+  arrange(desc(Degree)) %>%
+  head(10) %>%
+  print()
+
+# Ordina per Betweenness decrescente (clienti "ponte" più importanti)
+centralities %>%
+  arrange(desc(Betweenness)) %>%
+  head(10) %>%
+  print()
+
+# Ordina per Closeness decrescente (clienti più vicini a tutti)
+centralities %>%
+  arrange(desc(Closeness)) %>%
+  head(10) %>%
+  print()
+
+# Ordina per Eigenvector decrescente (clienti più influenti globalmente)
+centralities %>%
+  arrange(desc(Eigenvector)) %>%
+  head(10) %>%
+  print()
+
+```
+
+```{r}
+centralities %>%
+  arrange(desc(Betweenness)) %>%
+  head(10)
+
+```
+
+```{r}
+# Seleziona i codici cliente dei top 10 bottleneck
+top_bottleneck <- centralities %>%
+  arrange(desc(Betweenness)) %>%
+  slice(1:10) %>%
+  select(CodCliente)
+
+
+# Assicurati che entrambi abbiano CodCliente come character
+top_bottleneck$CodCliente <- as.character(top_bottleneck$CodCliente)
+datain$codcliente <- as.character(datain$codcliente)
+
+# Fai il join con datain
+profili_bottleneck <- top_bottleneck %>%
+  left_join(datain, by = c("CodCliente" = "codcliente"))
+
+# Visualizza i profili
+print(profili_bottleneck)
+
+
+
+```
+
+```{r}
+
+profili_bottleneck %>%
+  select( sesso, data_nascita, importo_totale, freq, musei_unici, sconto_bin, si2014) %>%
+  arrange(desc(importo_totale))
+
+```
+
+```{r}
+nrow(edges_counts)
+
+```
+```{r}
+edges_counts %>%
+  arrange(desc(weight)) %>%
+  head(10)
+
+```
+
+```{r}
+coppie_5plus <- edges_counts %>%
+  filter(weight > 5)
+
+print(nrow(coppie_5plus))  # quante coppie hanno condiviso >5 visite
+
+```
+
+
+```{r}
+coppie_5plus <- edges_counts %>%
+  filter(weight > 10)
+
+print(nrow(coppie_5plus))  # quante coppie hanno condiviso >5 visite
+
+```
+
+```{r}
+
+coppie_20plus <- edges_counts %>%
+  filter(weight > 20)
+
+print(nrow(coppie_20plus))  # quante coppie hanno condiviso >5 visite
+
+
+```
+
+```{r}
+profili_40plus <- edges_counts %>%
+  filter(weight > 40)
+
+print(nrow(profili_40plus)) 
+
+```
+
+
+```{r}
+library(dplyr)
+
+# 1) Assicurati che i due ID siano dello stesso tipo
+datain <- datain %>%
+  mutate(codcliente = as.character(codcliente))
+
+centralities <- centralities %>%
+  rename(codcliente = CodCliente) %>%
+  mutate(codcliente = as.character(codcliente))
+
+# 2) Esegui il join per aggiungere le colonne di centralità
+datain_enriched <- datain %>%
+  left_join(centralities, by = "codcliente")
+
+# 3) Controlla il risultato
+glimpse(datain_enriched)
+head(datain_enriched)
+
+
+datain <- datain_enriched
+skim_without_charts(datain)
+```
+
+
+```{r}
+datain[is.na(datain)] <- 0
+
+sum(is.na(datain))  # deve tornare 0
+```
+
+
+```{r}
+write.csv(datain, 
+          file       = "datain2.csv", 
+          row.names  = FALSE)
+
+```
+
+
+# PREDICTION
+
+
+Si carica il dataset con le misure di centralitá . Si devono pero eliminare le variabili leakage, quelle che aggiungono spiegazioni sul churn come ultimo_ingresso, mese2014 (se uguale a zero, indica che non e maiavvenuto = churner)
+
+```{r}
+
+# Ricaricare
+datain <- read.csv("datain2.csv", stringsAsFactors = FALSE)
+
+```
+
+```{r}
+datain$stratum <- NULL
+datain$w_iptw <- NULL
+datain$ps <- NULL
+datain$mese2014 <- NULL
+datain$mese_ultimo_ing<- NULL
+datain$abb_qnt30 <- NULL
+summary(datain)
+
+
+```
+
+
+
+
+## Albero di classificazione CART
+
+```{r}
+
+library(rpart)
+library(randomForest)
+library(gbm)
+library(ROCR)
+library(caret)
+library(ggplot2)
+library(dplyr)
+library(doParallel)
+```
+
+
+1. Preparazione dati: split train/test
+
+```{r}
+# 
+set.seed(13)
+
+
+train_idx <- createDataPartition(datain$si2014, p = 0.7, list = FALSE)
+train <- datain[ train_idx, ]
+test  <- datain[-train_idx, ]
+train$si2014 <- factor(train$si2014, levels = c(0,1))
+test$si2014  <- factor(test$si2014,  levels = c(0,1))
+
+head(datain)
+train
+```
+
+2. CART model 
+```{r}
+cart_model <- rpart(si2014 ~ ., data = train,
+                    method    = "class",
+                    parms     = list(prior = prop.table(table(train$si2014)),
+                                     split = "information"),
+                    control   = rpart.control(cp = 0.01))
+```
+
+```{r}
+pred_cart_cls <- predict(cart_model, test, type = "class")
+print(confusionMatrix(pred_cart_cls, test$si2014))
+```
+
+```{r}
+# ROC + AUC
+pred_cart_prob <- predict(cart_model, test, type = "prob")[,2]
+roc_cart       <- prediction(pred_cart_prob, test$si2014)
+auc_cart       <- performance(roc_cart, "auc")@y.values[[1]]
+cat("AUC (CART):", round(auc_cart*100, 2), "%\n")
+
+perf_cart_roc <- performance(roc_cart, "tpr", "fpr")
+ROC_df_cart   <- data.frame(fpr = unlist(perf_cart_roc@x.values),
+                            tpr = unlist(perf_cart_roc@y.values))
+# Plot ROC CART
+ggplot(ROC_df_cart, aes(x = fpr, y = tpr)) +
+  geom_line(color = "blue") +
+  geom_abline(linetype = "dashed") +
+  labs(x = "FPR", y = "TPR", title = "ROC - CART")
+
+# Density delle probabilità predette
+df_cart_den <- data.frame(prob   = pred_cart_prob,
+                          actual = factor(test$si2014))
+ggplot(df_cart_den, aes(x = prob, fill = actual)) +
+  geom_density(alpha = 0.4, adjust = 1.5) +
+  labs(x = "P(pred=1)", title = "Density - CART")
+```
+
+
+## RANDOM FOREST
+
+
+SPLIT 
+
+```{r}
+# 1) Pulisci subito i nomi delle colonne (spazi, simboli, etc.)
+names(datain) <- make.names(names(datain), unique = TRUE)
+
+# 2) Assicurati che il target sia un factor con livelli espliciti
+datain$si2014 <- factor(datain$si2014, levels = c(0,1))
+
+# 3) Individua e rimuovi eventuali colonne “non atomiche” (matrici, liste)
+bad_cols <- names(datain)[sapply(datain, function(x) is.list(x) || is.matrix(x))]
+if(length(bad_cols)){
+  warning("Rimuovo colonne irregolari: ", paste(bad_cols, collapse = ", "))
+  datain <- datain[ , !(names(datain) %in% bad_cols)]
+}
+
+# 4) Converte tutti i predittori in numeric se non lo sono già
+datain <- datain %>%
+  mutate(across(-si2014, ~ as.numeric(as.character(.))))
+
+# 5) Rimuovi eventuali colonne a varianza zero (inutili per RF)
+nzv <- caret::nearZeroVar(datain, saveMetrics = TRUE)
+if(any(nzv$zeroVar)){
+  drop <- rownames(nzv)[nzv$zeroVar]
+  datain <- datain[ , !(names(datain) %in% drop)]
+}
+
+# 6) Split train/test
+set.seed(123)
+idx   <- caret::createDataPartition(datain$si2014, p = 0.7, list = FALSE)
+train2 <- datain[idx, ]
+test2  <- datain[-idx, ]
+
+
+
+```
+
+
+
+```{r}
+
+set.seed(123)
+rf_model <- randomForest(
+  si2014 ~ .,
+  data       = train2,
+  # bilanciamento: prendiamo lo stesso numero di esempi per ciascuna classe
+  sampsize   = rep(min(table(train2$si2014)), 2),
+  mtry       = floor(sqrt(ncol(train2)-1)),
+  ntree      = 250,
+  importance = TRUE,
+  do.trace   = 50
+)
+# Confusion Matrix
+pred_rf_cls <- predict(rf_model, test2, type = "class")
+print(confusionMatrix(pred_rf_cls, test2$si2014))
+```
+
+```{r}
+# ROC + AUC
+pred_rf_prob <- predict(rf_model, test2, type = "prob")[,2]
+roc_rf       <- prediction(pred_rf_prob, test2$si2014)
+auc_rf       <- performance(roc_rf, "auc")@y.values[[1]]
+cat("AUC (RF):", round(auc_rf*100, 2), "%\n")
+
+perf_rf_roc <- performance(roc_rf, "tpr", "fpr")
+ROC_df_rf   <- data.frame(fpr = unlist(perf_rf_roc@x.values),
+                          tpr = unlist(perf_rf_roc@y.values))
+
+```
+
+```{r}
+# Plot ROC comparato CART vs RF
+ggplot() +
+  geom_line(data = ROC_df_cart, aes(x = fpr, y = tpr, colour = "CART")) +
+  geom_line(data = ROC_df_rf,   aes(x = fpr, y = tpr, colour = "RF")) +
+  geom_abline(linetype = "dashed") +
+  scale_colour_manual(name = "Model",
+                      values = c(CART = "blue", RF = "red")) +
+  labs(x = "FPR", y = "TPR", title = "ROC - CART vs RF")
+
+# Density RF
+df_rf_den <- data.frame(prob   = pred_rf_prob,
+                        actual = factor(test2$si2014))
+ggplot(df_rf_den, aes(x = prob, fill = actual)) +
+  geom_density(alpha = 0.4, adjust = 1.5) +
+  labs(x = "P(pred=1)", title = "Density - RF")
+```
+
+
+## AAdaboost com GBM
+
+```{r}
+
+# Prepara due copie: una con factor per RF/CART, una con 0/1 per AdaBoost
+train_gbm <- train2
+test_gbm  <- test2
+
+# Trasforma il target in numeric {0,1}
+train_gbm$si2014 <- as.numeric(as.character(train_gbm$si2014))
+test_gbm$si2014  <- as.numeric(as.character(test_gbm$si2014))
+
+# Ora alleni AdaBoost su train_gbm
+set.seed(123)
+ada_model <- gbm(
+  si2014 ~ .,
+  data           = train_gbm,
+  distribution   = "adaboost",
+  n.trees        = 100,
+  interaction.depth = 10,
+  bag.fraction   = 0.5,
+  train.fraction = 0.8,
+  n.cores        = 4,
+  verbose        = TRUE
+)
+
+# Predict prob su test_gbm
+pred_ada_prob <- predict(ada_model, test_gbm, n.trees = 100, type = "response")
+
+# Se vuoi metrci da 0/1, usa test_gbm$si2014; 
+# per confusionMatrix invece tieni fuori questa parte e usa sempre factor su 'test'
+roc_ada <- ROCR::prediction(pred_ada_prob, test_gbm$si2014)
+auc_ada <- ROCR::performance(roc_ada, "auc")@y.values[[1]]
+cat("AUC (AdaBoost):", round(auc_ada*100,2), "%\n")
+
+# Load required package
+library(caret)
+
+# 1) Generate class predictions from AdaBoost probabilities (threshold = 0.5)
+pred_ab_cls <- ifelse(pred_ada_prob > 0.5, 1, 0)
+
+# 2) Convert to factor with same levels as the reference
+pred_ab_cls <- factor(pred_ab_cls, levels = c(0, 1))
+ref_ab      <- factor(test2$si2014,  levels = c(0, 1))
+
+# 3) Compute confusion matrix
+confusionMatrix(pred_ab_cls, ref_ab, positive = "1")
+
+```
+
+```{r}
+# Calcola TPR e FPR per AdaBoost
+perf_ada_roc <- performance(roc_ada, "tpr", "fpr")
+ROC_df_ada   <- data.frame(
+  fpr = unlist(perf_ada_roc@x.values),
+  tpr = unlist(perf_ada_roc@y.values)
+)
+
+# Ora puoi fare il plot insieme agli altri
+ggplot() +
+  geom_line(data = ROC_df_cart, aes(x = fpr, y = tpr, colour = "CART")) +
+  geom_line(data = ROC_df_rf,   aes(x = fpr, y = tpr, colour = "RF")) +
+  geom_line(data = ROC_df_ada,  aes(x = fpr, y = tpr, colour = "AdaBoost")) +
+  geom_abline(linetype = "dashed") +
+  scale_colour_manual(name = "Model",
+                      values = c(CART = "blue",
+                                 RF   = "red",
+                                 AdaBoost = "green")) +
+  labs(x = "FPR", y = "TPR", title = "ROC - CART vs RF vs AdaBoost")
+
+
+# Density AdaBoost
+df_ada_den <- data.frame(prob   = pred_ada_prob,
+                         actual = factor(test2$si2014))
+ggplot(df_ada_den, aes(x = prob, fill = actual)) +
+  geom_density(alpha = 0.4, adjust = 1.5) +
+  labs(x = "P(pred=1)", title = "Density - AdaBoost")
+
+```
+
+```{r}
+registerDoParallel(cores = 4)
+levels(datain$si2014) <- c("no", "si")
+ctrl <- trainControl(method         = "repeatedcv",
+                     number         = 5,
+                     repeats        = 3,
+                     classProbs     = TRUE,
+                     summaryFunction= twoClassSummary,
+                     verboseIter    = TRUE)
+rf_grid <- expand.grid(mtry = 2:6)
+```
+
+```{r}
+perf_gain <- performance(roc_rf, "tpr", "rpp")
+plot(perf_gain, main = "Gain Chart - RF")
+
+```
+
+
+
+### Marketing campaing
+
+```{r}
+
+# 8. Profit curve per campagna marketing – codice corretto  
+
+
+library(dplyr)
+library(ggplot2)
+
+# 1) Definisci costi e voucher  
+cost_contact   <- 2    # € per contatto  
+voucher_amount <- 10   # € voucher solo per churner  
+
+# 2) Prepara test2 come copia pulita di test  
+test2 <- test  
+
+# 3) Calcola le probabilità di churn SULLO STESSO test2  
+pred_cart_prob <- predict(cart_model, test, type = "prob")[,2]  
+pred_rf_prob   <- predict(rf_model,   test2, type = "prob")[,2]  
+pred_ada_prob  <- predict(ada_model,  test2, n.trees = 100, type = "response")  
+
+# 4) Verifica che le lunghezze combacino  
+stopifnot(
+  length(pred_cart_prob) == nrow(test2),
+  length(pred_rf_prob)   == nrow(test2),
+  length(pred_ada_prob)  == nrow(test2)
+)  
+
+# 5) Aggiungi a test2 le colonne delle predizioni e il valore cliente  
+test2 <- test2 %>%  
+  mutate(
+    cart_pred      = pred_cart_prob,
+    rf_pred        = pred_rf_prob,
+    ada_pred       = pred_ada_prob,
+    customer_value = importo_totale   # la spesa totale per musei
+  )  
+
+# 6) Calcola il profitto per cliente  
+test2 <- test2 %>%  
+  mutate(
+    profit = if_else(
+      as.numeric(as.character(si2014)) == 1,
+      customer_value - (cost_contact + voucher_amount),
+      - cost_contact
+    )
+  )  
+
+# 7) Funzione per creare la profit curve  
+make_profit_curve <- function(df, pred_col, model_name) {  
+  df %>%  
+    arrange(desc(.data[[pred_col]])) %>%  
+    mutate(
+      instance   = row_number(),  
+      cum_profit = cumsum(profit)  
+    ) %>%  
+    select(instance, cum_profit) %>%  
+    mutate(model = model_name)  
+}  
+
+# 8) Genera i data.frame per ciascun modello  
+pc_cart <- make_profit_curve(test2, "cart_pred", "CART")  
+pc_rf   <- make_profit_curve(test2, "rf_pred",   "RandomForest")  
+pc_ada  <- make_profit_curve(test2, "ada_pred",  "AdaBoost")  
+
+# 9) Combina e plottali  
+profit_curves <- bind_rows(pc_cart, pc_rf, pc_ada)  
+
+ggplot(profit_curves, aes(x = instance, y = cum_profit, color = model)) +  
+  geom_line(size = 1) +  
+  scale_color_manual(
+    values = c(CART = "blue", RandomForest = "red", AdaBoost = "green")
+  ) +  
+  labs(  
+    title = "Profit Curve della Campagna Marketing",  
+    x     = "Clienti ordinati per probabilità di churn decrescente",  
+    y     = "Profitto cumulato (€)",  
+    color = "Modello"  
+  ) +  
+  theme_minimal()
+
+```
+
+```{r}
+# 9. Curva costo totale vs numero di clienti (probabilità di churn crescente)
+
+library(dplyr)
+library(ggplot2)
+
+# Parametri di costo
+cost_contact   <- 2    # € per contatto
+voucher_amount <- 10   # € voucher solo per churner
+
+# Flag numerico churn
+test2 <- test2 %>%
+  mutate(
+    churn_flag = as.numeric(as.character(si2014))
+  )
+
+# Funzione per costruire la curva di costo cumulato
+make_cost_curve <- function(df, prob_col, model_name) {
+  df %>%
+    # ordina per probabilità di churn crescente
+    arrange(.data[[prob_col]]) %>%
+    mutate(
+      instance = row_number(),
+      # costo cumulato = costo contatti + voucher su churner
+      cum_cost = instance * cost_contact +
+                 cumsum(churn_flag) * voucher_amount
+    ) %>%
+    select(instance, cum_cost) %>%
+    mutate(model = model_name)
+}
+
+# Crea le curve per ciascun modello
+cc_cart <- make_cost_curve(test2, "cart_pred", "CART")
+cc_rf   <- make_cost_curve(test2, "rf_pred",   "RandomForest")
+cc_ada  <- make_cost_curve(test2, "ada_pred",  "AdaBoost")
+
+# Combina in un unico data.frame
+cost_curves <- bind_rows(cc_cart, cc_rf, cc_ada)
+
+# Plot
+ggplot(cost_curves, aes(x = cum_cost, y = instance, color = model)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c("CART"="blue",
+                                "RandomForest"="red",
+                                "AdaBoost"="green")) +
+  labs(
+    title = "Costo Totale Campagna vs Numero di Clienti\n(ordinati per probabilità di churn crescente)",
+    x = "Costo Totale Campagna (€)",
+    y = "Numero di Clienti Contattati",
+    color = "Modello"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+# Se non hai già un identificativo cliente, creane uno a partire dalla riga
+if (!"customer_id" %in% names(test2)) {
+  test2$customer_id <- seq_len(nrow(test2))
+}
+
+# Scegli la colonna di probabilità di churn (ad es. rf_pred per Random Forest)
+# Ordina prima per probabilità di churn decrescente, poi per valore cliente decrescente
+top_customers <- test2 %>%
+  arrange(desc(rf_pred), desc(customer_value)) %>%
+  select(customer_id, si2014, rf_pred, customer_value) %>%
+  head(10)
+
+# Stampa i top 10 clienti a maggior valore con più alta probabilità di churn
+print(top_customers)
+
+```
+
+```{r}
+
+```
+
+
+
+
+
+# CAUSALITY 
+
+
+
+```{r}
+
+# Ricaricare
+datain <- read.csv("datain2.csv", stringsAsFactors = FALSE)
+
+```
+
+### Modello 1
+
+```{r}
+library(MatchIt)
+
+
+covariate_names <- setdiff(names(datain), c("si2014", "sesso"))
+fml <- as.formula(paste("sesso ~", paste(covariate_names, collapse = " + ")))
+
+
+
+m.out <- matchit(fml, data = datain, method = "nearest", distance = "glm")
+
+# Controlla il bilanciamento delle covariate dopo il matching
+summary(m.out)
+
+# Estrai il dataset matched
+matched_data <- match.data(m.out)
+
+
+sum(is.na(matched_data$weights))  # deve restituire 0
+sum(is.na(matched_data$si2014))
+
+# Stima dell’effetto causale del genere sul churn (si2014 = 1 se ha rinnovato)
+fit <- lm(si2014 ~ sesso, data = matched_data, weights = weights)
+summary(fit)
+
+# Visualizzazione: boxplot della variabile si2014 per genere dopo il matching
+matched_data$sesso <- factor(matched_data$sesso, labels = c("Maschi", "Femmine"))
+
+ggplot(matched_data, aes(x = sesso, y = si2014, fill = sesso)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.3) +
+  scale_fill_manual(values = c("skyblue", "lightpink")) +
+  labs(title = "Churn Rate per Gender (Matched Sample)",
+       x = "Genere", y = "Probabilità di Rinnovo (si2014)",
+       fill = "Genere") +
+  theme_minimal()
+```
+
+```{r}
+library(MatchIt)
+library(dplyr)
+
+# … dopo aver fatto m.out <- matchit(…)
+
+# 1) Estraggo il dataset matched e tengo solo pesi > 0
+matched_data <- match.data(m.out) %>%
+  filter(weights > 0)       # <- qui scartiamo i controlli non abbinati
+
+# 2) Ricontrollo che non ci siano NA in y o nel weight
+sum(is.na(matched_data$si2014))     # deve fare 0
+sum(is.na(matched_data$weights))    # deve fare 0
+table(matched_data$weights)         # per vedere quanti 1:1 vs k:1 match
+
+# 3) Se vuoi un glm “vero” di logit, assicurati che sesso sia factor
+matched_data <- matched_data %>%
+  mutate(sesso = factor(sesso, levels = c(0,1),
+                        labels = c("Maschi","Femmine")))
+
+# 4a) Linear Probability Model (WLS)
+fit_lm <- lm(si2014 ~ sesso,
+             data    = matched_data,
+             weights = weights)
+summary(fit_lm)
+
+# 4b) Weighted logistic regression
+fit_glm <- glm(si2014 ~ sesso,
+               data    = matched_data,
+               weights = weights,
+               family  = binomial(link="logit"))
+summary(fit_glm)
+
+# 5) Boxplot post-matching
+library(ggplot2)
+ggplot(matched_data, aes(x = sesso, y = si2014, weight = weights, fill = sesso)) +
+  geom_boxplot(alpha = 0.6) +
+  stat_summary(fun = weighted.mean, geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(title = "Renewal Probability by Gender (Matched Sample)",
+       x     = "Gender", y = "Renewal (si2014)") +
+  theme_minimal()
+
+```
+
+
+
+Significato: nel campione matched le femmine hanno una probabilità di rinnovo inferiore di circa 0.9% , o odds di rinnovo inferiori di circa 4 %, rispetto ai maschi (p≈0.01).
+
+```{r}
+m.out$call
+# Ogni riga corrisponde a un trattato (femmina); la colonna è 
+# il controllore abbinato (codcliente). Se ratio>1, ci sono più colonne.
+head(m.out$match.matrix)
+
+
+```
+
+```{r}
+library(dplyr)
+matched_data <- match.data(m.out) %>% filter(weights > 0)
+# matched_data ha:
+#  - subclass: ID del blocco di matching
+#  - weights: 1 per ogni coppia nearest‐neighbor
+#  - treat:   indicatore di trattamento originale
+#  - distance: propensity score
+#  - sesso, si2014, e tutte le covariate
+head(matched_data)
+
+```
+
+```{r}
+# Distribuzione dei propensity score prima e dopo matching
+plot(m.out, type = "hist")
+
+# “Jitter plot” delle covariate principali per vedere la vicinanza dei match
+plot(m.out, type = "jitter", interactive = FALSE)
+
+# QQ-plot per controllare l’allineamento delle covariate
+plot(m.out, type = "qq", pal = c("brown","orange"))
+
+```
+
+```{r}
+# Assume you’ve already run:
+m.out <- matchit(fml, data = datain, method = "nearest", distance = "glm")
+
+# 1) Inspect the match matrix (rows = treated IDs, cols = matched control IDs)
+head(m.out$match.matrix, 5)
+
+# 2) Extract a specific matched pair, e.g. the first one
+first_pair <- m.out$match.matrix[1, ]       # a named vector of length = ratio (here 1)
+treated_id <- rownames(m.out$match.matrix)[1]
+control_id <- as.character(first_pair[1])
+
+# 3) Pull their covariate profiles side by side
+library(dplyr)
+
+example_pair <- datain %>%
+  filter(codcliente %in% c(treated_id, control_id)) %>%
+  select(
+    codcliente,
+    sesso,
+    si2014,
+    data_nascita,
+    freq,
+    musei_unici,
+    importo_totale,
+    sconto_bin,
+    abb_museotorino,
+    abb_ridotto
+  ) %>%
+  arrange(desc(codcliente == treated_id))  # treated on top
+
+print(example_pair)
+
+```
+
+
+```{r}
+# Keep only units with a valid subclass (i.e. actually matched)
+m.data2 <- m.data %>%
+  filter(!is.na(subclass) & weights > 0)
+
+# 6a) Linear Probability Model with clustered SE
+fit_lm2 <- lm(si2014_num ~ sesso,
+              data    = m.data2,
+              weights = weights)
+library(lmtest)
+library(sandwich)
+
+coeftest(fit_lm2,
+         vcov = vcovCL,
+         cluster = ~ subclass)
+
+# 6b) Weighted logistic regression with clustered SE
+fit_glm2 <- glm(si2014 ~ sesso,
+                data    = m.data2,
+                weights = weights,
+                family  = binomial(link = "logit"))
+
+coeftest(fit_glm2,
+         vcov = vcovCL,
+         cluster = ~ subclass)
+
+```
+
+
+```{r}
+# Pre-matching (usa il dataset originale completo)
+ds <- datain %>%
+  mutate(si2014_num = as.numeric(as.character(si2014)),
+         sessoF = factor(sesso, labels = c("Maschi", "Femmine")))
+
+p1 <- ggplot(ds, aes(x = sesso, y = si2014_num, fill = sesso)) +
+  geom_boxplot(alpha = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(title = "Churn rate by Gender (pre-matching)",
+       x = "Genere", y = "Probabilità di Rinnovo") +
+  theme_minimal()
+
+# Post-matching (già pesato)
+p2 <- ggplot(m.data, aes(x = sesso, y = si2014_num, fill = sesso, weight = weights)) +
+  geom_boxplot(alpha = 0.6) +
+  stat_summary(fun = weighted.mean, geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(title = "Churn rate by Gender (post-matching)",
+       x = "Genere", y = "Probabilità di Rinnovo (pesata)") +
+  theme_minimal()
+
+# Stampa i plot
+print(p1)
+print(p2)
+
+```
+
+```{r}
+summary(m.out)
+
+```
+
+Dopo il matching, quasi tutte le covariate hanno uno Standardized Mean Difference |SMD| < 0.1 (tranne forse qualche residual imbalance su “distance” o “data_nascita”).
+
+In generale il campione matched è abbastanza bilanciato, dunque il confronto maschi vs. femmine è credibile.
+
+
+```{r}
+# 1) Distribuzioni dei propensity score
+plot(m.out, type = "hist")     # istogrammi dei PS per trattati e controlli
+plot(m.out, type = "density")  # densità dei PS
+
+```
+
+```{r}
+
+
+library(cobalt)
+bal <- bal.tab(m.out)          # calcola i SMD
+love.plot(bal,                   # disegna il love plot
+          stat = "mean.diffs",   # standardized mean differences
+          threshold = 0.1,       # linea di cut‐off
+          var.order = "unadjusted",
+          abs = TRUE)
+
+```
+
+
+In generale il campione matched è abbastanza bilanciato, dunque il confronto maschi vs. femmine è credibile
+
+```{r}
+# Istogrammi dei propensity scores
+plot(m.out, type = "hist", main = "PS distribution: pre- vs post-matching")
+
+# Love‐plot per tutte le covariate
+library(cobalt)
+love.plot(bal.tab(m.out), threshold = 0.1, var.order = "unadjusted")
+
+```
+
+
+### mdollo 2
+```{r}
+library(dplyr)
+library(survey)
+
+# 1) Stimo il PS
+psmod <- glm(sesso ~.
+            , family = binomial, data = datain)
+datain$ps <- predict(psmod, type = "response")
+
+# 2) Calcolo i pesi IPTW
+datain <- datain %>%
+  mutate(
+    w_iptw = case_when(
+      sesso == 1 ~ 1/ps,
+      sesso == 0 ~ 1/(1 - ps)
+    )
+  )
+
+# 3) Modello pesato (survey)
+des <- svydesign(ids = ~1, weights = ~w_iptw, data = datain)
+iptw_fit <- svyglm(si2014 ~ sesso, design = des, family = quasibinomial())
+summary(iptw_fit)
+
+```
+
+Coefficiente sesso ≈ –0.00003, p = 0.998 → nessun effetto stimato.
+
+L’ATE calcolato è praticamente zero.
+
+Interpretazione: una volta pesato sull’intera popolazione via IPTW, non emerge alcuna differenza tra maschi e femmine.
+
+
+### Modello 3
+
+```{r}
+datain <- datain %>%
+  mutate(stratum = ntile(ps, 5))  # 5 quintili
+
+ate_strata <- datain %>%
+  group_by(stratum) %>%
+  summarize(
+    treat_mean   = mean(si2014[sesso == 1]),
+    control_mean = mean(si2014[sesso == 0]),
+    weight       = n()
+  ) %>%
+  summarise(ATE = weighted.mean(treat_mean - control_mean, weight))
+print(ate_strata)
+
+```
+
+ATE complessivo su 5 strati ézero
+
+
+### Modello 5
+
+```{r}
+# estrai i vettori (come prima)
+treated <- matched_data %>%
+  filter(sesso == 1) %>%
+  arrange(subclass) %>%
+  pull(si2014)
+
+control <- matched_data %>%
+  filter(sesso == 0) %>%
+  arrange(subclass) %>%
+  pull(si2014)
+
+# controlla concordanza vs discordanza
+disc_count <- sum(treated != control)
+cat("Numero di coppie discordanti: ", disc_count, " su ", length(treated), "\n")
+
+
+```
+
+```{r}
+library(rbounds)
+
+# calcola i due conteggi
+n_t1_c0 <- sum(treated == 1 & control == 0)
+n_t0_c1 <- sum(treated == 0 & control == 1)
+
+cat("Pairs treated=1/control=0:", n_t1_c0, "\n")
+cat("Pairs treated=0/control=1:", n_t0_c1, "\n")
+
+# se entrambi >0, fai Rosenbaum bounds
+if(n_t1_c0 + n_t0_c1 > 0) {
+  mhbounds(x     = n_t1_c0,
+           y     = n_t0_c1,
+           Gamma = 1.1)
+} else {
+  message("Nessuna coppia discordante: impossibile fare sensitivity analysis.")
+}
+
+```
+significa che il churn rispetto al genere è identico in tutti i matched pairs, ergo non c'é evidenza di differenza e non puoi stimarne la robustezza a confondenti non osservati.
+
+0 coppie discordanti → non c’è alcuna differenza di outcome fra maschi e femmine nelle coppie matched, per cui non si può eseguire la bounds-analysis.
+
+femmine e maschi hanno sempre lo stesso esito, confermando un effetto nullo
+
+
+### GLM full
+
+```{r}
+glm_full <- glm(si2014 ~ ., family = binomial, data = datain)
+summary(glm_full)
+
+
+glm_full2 <- glm(si2014 ~ sesso, family = binomial, data = datain)
+summary(glm_full2)
+```
+Coefficiente sesso ≈ +0.03994, p = 0.0128 → effetto positivo (femmine più propense a rinnovare) se non controlli per le covariate.
+
+### RISUTATI
+
+PSM (LPM e logit) suggerisce un piccolo effetto negativo delle femmine sul rinnovo (–0.9 p.p., p≈0.01).
+
+IPTW e stratification producono un ATE praticamente zero.
+
+Sensitivity analysis non rileva discordanti (effetto nullo).
+
+Il modello grezzo (full glm) senza controllo dà un effetto opposto (femmine +).
+
+Questa inconsistenza fra i metodi indica che non ci sono prove robuste di un impatto causale stabile di gender sul churn:
+
+Gli effetti stimati sono molto vicini a zero (tra –1 p.p. e +4 p.p.)
+
+Solo con il matching puro si vede un segnale debole, ma non è riprodotto da IPTW/stratification.
+
+La mancanza di coppie discordanti e la forte dipendenza sul metodo scelto suggeriscono che il gender non è un vero driver causale di rinnovo, ma piuttosto che eventuali differenze sono dovute a rumore o a confondenti residui.
+
+Risposta: non emerge un effetto causale affidabile di gender sul churn—qualsiasi associazione osservata è debole, incoerente e non robusta a diversi metodi di controllo.
+
